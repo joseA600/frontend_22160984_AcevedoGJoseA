@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   obtenerRoles,
   obtenerRol,
@@ -17,6 +17,10 @@ const idEditando = ref(null)
 const mensajeExito = ref('')
 const mensajeError = ref('')
 const respuestaBackend = ref(null)
+
+// Búsqueda individual por ID y filtro de tabla
+const idBusqueda = ref('')
+const filtroTexto = ref('')
 
 // Modal de detalle
 const rolSeleccionado = ref(null)
@@ -57,6 +61,7 @@ async function cargarRoles() {
 // Ver detalle de un rol por ID (GET /roles/:id)
 async function verDetalle(id) {
   cargandoDetalle.value = true
+  limpiarNotificaciones()
   try {
     const json = await obtenerRol(id)
     rolSeleccionado.value = json.data
@@ -67,6 +72,16 @@ async function verDetalle(id) {
   } finally {
     cargandoDetalle.value = false
   }
+}
+
+// Buscar individualmente por ID ingresado en el buscador
+async function buscarPorId() {
+  const id = idBusqueda.value.toString().trim()
+  if (!id) {
+    notificarError(new Error('Ingresa un ID válido para buscar'))
+    return
+  }
+  await verDetalle(id)
 }
 
 function cerrarModal() {
@@ -132,6 +147,17 @@ async function borrarRol(rol) {
   }
 }
 
+// Roles filtrados por texto (en vivo)
+const rolesFiltrados = computed(() => {
+  if (!filtroTexto.value.trim()) return roles.value
+  const query = filtroTexto.value.toLowerCase().trim()
+  return roles.value.filter((rol) =>
+    rol.name.toLowerCase().includes(query) ||
+    (rol.description && rol.description.toLowerCase().includes(query)) ||
+    rol.id.toString().includes(query)
+  )
+})
+
 onMounted(() => {
   cargarRoles()
 })
@@ -162,7 +188,31 @@ onMounted(() => {
       <button class="alert-close" @click="mensajeError = ''">×</button>
     </div>
 
-    <!-- Sección del Formulario -->
+    <!-- Búsqueda Individual por ID -->
+    <section class="card search-card">
+      <div class="card-header">
+        <h2>Buscar Rol por ID</h2>
+      </div>
+      <div class="form-body">
+        <form @submit.prevent="buscarPorId" class="search-form">
+          <div class="search-field">
+            <label for="buscarId">Identificador (ID):</label>
+            <input
+              id="buscarId"
+              v-model="idBusqueda"
+              type="number"
+              min="1"
+              placeholder="Ingresa el ID del rol (ej. 1, 2, 3)"
+            />
+          </div>
+          <button type="submit" class="btn btn-primary" :disabled="cargandoDetalle">
+            {{ cargandoDetalle ? 'Consultando...' : 'Buscar' }}
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Sección del Formulario Crear / Editar -->
     <section class="card form-card">
       <div class="card-header">
         <h2>{{ idEditando ? `Editar Rol #${idEditando}` : 'Nuevo Rol' }}</h2>
@@ -215,11 +265,19 @@ onMounted(() => {
       <div class="card-header table-header">
         <div>
           <h2>Listado de Roles</h2>
-          <span class="count-badge">{{ roles.length }} registro(s)</span>
+          <span class="count-badge">{{ rolesFiltrados.length }} de {{ roles.length }} registro(s)</span>
         </div>
-        <button class="btn btn-outline" @click="cargarRoles" :disabled="cargando">
-          {{ cargando ? 'Cargando...' : 'Recargar' }}
-        </button>
+        <div class="table-tools">
+          <input
+            v-model="filtroTexto"
+            type="text"
+            placeholder="Filtrar por nombre o texto..."
+            class="filter-input"
+          />
+          <button class="btn btn-outline" @click="cargarRoles" :disabled="cargando">
+            {{ cargando ? 'Cargando...' : 'Recargar' }}
+          </button>
+        </div>
       </div>
 
       <div class="table-responsive">
@@ -233,12 +291,12 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="roles.length === 0">
+            <tr v-if="rolesFiltrados.length === 0">
               <td colspan="4" class="empty-state">
-                No hay registros disponibles.
+                No se encontraron registros.
               </td>
             </tr>
-            <tr v-for="rol in roles" :key="rol.id">
+            <tr v-for="rol in rolesFiltrados" :key="rol.id">
               <td class="cell-id">#{{ rol.id }}</td>
               <td>
                 <span class="role-tag">{{ rol.name }}</span>
@@ -478,6 +536,32 @@ onMounted(() => {
   gap: 10px;
 }
 
+/* Búsqueda por ID */
+.search-form {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.search-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.search-field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.search-field input {
+  padding: 9px 12px;
+}
+
 /* Botones */
 .btn {
   padding: 8px 16px;
@@ -517,6 +601,19 @@ onMounted(() => {
 .table-header {
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.table-tools {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filter-input {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  min-width: 220px;
 }
 
 .count-badge {
