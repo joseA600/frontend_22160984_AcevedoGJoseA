@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import {
   obtenerRoles,
   obtenerRol,
@@ -8,17 +8,26 @@ import {
   eliminarRol,
 } from '../services/roles.service'
 
+// Estados reactivos
 const roles = ref([])
-const nombre = ref('')
-const descripcion = ref('')
-const idEditando = ref(null)
-const busqueda = ref('')
-const rolDetalle = ref(null)
 const mensaje = ref('')
 const error = ref('')
 const respuestaRaw = ref(null)
 
-function notificar(txt, json = null) {
+// 1. Crear nuevo rol
+const nuevoNombre = ref('')
+const nuevaDescripcion = ref('')
+
+// 2. Consultar rol (Ver uno)
+const consultarId = ref('')
+const rolConsultado = ref(null)
+
+// 3. Editar rol
+const editarId = ref('')
+const editarNombre = ref('')
+const editarDescripcion = ref('')
+
+function avisar(txt, json = null) {
   mensaje.value = txt
   error.value = ''
   if (json) respuestaRaw.value = json
@@ -29,7 +38,7 @@ function fallar(err) {
   mensaje.value = ''
 }
 
-// 1. Listar todos
+// Listar todos los roles
 async function cargarRoles() {
   try {
     const json = await obtenerRoles()
@@ -40,184 +49,196 @@ async function cargarRoles() {
   }
 }
 
-// 2. Buscar por ID o por nombre
-async function buscar() {
-  const termino = busqueda.value.trim()
-  if (!termino) {
-    cargarRoles()
-    rolDetalle.value = null
+// Crear rol
+async function ejecutarCrear() {
+  const nom = nuevoNombre.value.trim()
+  if (!nom) {
+    error.value = 'El nombre es obligatorio'
     return
   }
 
-  // Si es un número entero, consulta el endpoint específico GET /roles/:id
-  if (/^\d+$/.test(termino)) {
-    try {
-      const json = await obtenerRol(termino)
-      rolDetalle.value = json.data
-      notificar(`Rol #${termino} encontrado`, json)
-    } catch (e) {
-      rolDetalle.value = null
-      fallar(e)
-    }
-  } else {
-    // Si es texto, filtra por nombre en la lista
-    rolDetalle.value = null
-    notificar(`Filtrando por: ${termino}`)
+  try {
+    const json = await crearRol({
+      name: nom,
+      description: nuevaDescripcion.value.trim() || null,
+    })
+    avisar('Rol creado exitosamente', json)
+    nuevoNombre.value = ''
+    nuevaDescripcion.value = ''
+    await cargarRoles()
+  } catch (e) {
+    fallar(e)
   }
 }
 
-function limpiarBusqueda() {
-  busqueda.value = ''
-  rolDetalle.value = null
-  cargarRoles()
-}
+// Consultar un rol por ID
+async function ejecutarConsultar() {
+  const id = consultarId.value.toString().trim()
+  if (!id) {
+    error.value = 'Ingresa un ID para consultar'
+    return
+  }
 
-// 3. Ver uno en detalle
-async function verUno(id) {
   try {
     const json = await obtenerRol(id)
-    rolDetalle.value = json.data
-    notificar(`Detalle del rol #${id}`, json)
+    rolConsultado.value = json.data
+    avisar(`Rol #${id} consultado correctamente`, json)
   } catch (e) {
+    rolConsultado.value = null
     fallar(e)
   }
 }
 
-// 4. Crear o Actualizar
-async function guardar() {
-  const n = nombre.value.trim()
-  if (!n) {
-    error.value = 'El campo nombre es obligatorio'
+// Cargar datos en el cuadro de editar al ingresar ID
+async function cargarDatosParaEditar() {
+  const id = editarId.value.toString().trim()
+  if (!id) {
+    error.value = 'Ingresa el ID del rol que deseas editar'
     return
   }
 
-  const payload = {
-    name: n,
-    description: descripcion.value.trim() || null,
+  try {
+    const json = await obtenerRol(id)
+    editarNombre.value = json.data.name
+    editarDescripcion.value = json.data.description || ''
+    avisar(`Datos del rol #${id} cargados para editar`, json)
+  } catch (e) {
+    fallar(e)
+  }
+}
+
+// Guardar actualización de rol
+async function ejecutarActualizar() {
+  const id = editarId.value.toString().trim()
+  const nom = editarNombre.value.trim()
+
+  if (!id) {
+    error.value = 'Ingresa el ID del rol a actualizar'
+    return
+  }
+  if (!nom) {
+    error.value = 'El nombre no puede estar vacío'
+    return
   }
 
   try {
-    let json
-    if (idEditando.value) {
-      json = await actualizarRol(idEditando.value, payload)
-      notificar(`Rol #${idEditando.value} actualizado`, json)
-    } else {
-      json = await crearRol(payload)
-      notificar('Rol creado', json)
-    }
-    limpiarForm()
+    const json = await actualizarRol(id, {
+      name: nom,
+      description: editarDescripcion.value.trim() || null,
+    })
+    avisar(`Rol #${id} actualizado exitosamente`, json)
+    editarId.value = ''
+    editarNombre.value = ''
+    editarDescripcion.value = ''
     await cargarRoles()
   } catch (e) {
     fallar(e)
   }
 }
 
-function editar(rol) {
-  idEditando.value = rol.id
-  nombre.value = rol.name
-  descripcion.value = rol.description || ''
-}
+// Eliminar rol
+async function ejecutarEliminar(rol) {
+  if (!confirm(`¿Estás seguro de eliminar el rol "${rol.name}" (ID #${rol.id})?`)) return
 
-function limpiarForm() {
-  idEditando.value = null
-  nombre.value = ''
-  descripcion.value = ''
-}
-
-// 5. Eliminar
-async function borrar(rol) {
-  if (!confirm(`¿Eliminar el rol ${rol.name} (#${rol.id})?`)) return
   try {
     const json = await eliminarRol(rol.id)
-    notificar(`Rol #${rol.id} eliminado`, json)
-    if (rolDetalle.value && rolDetalle.value.id === rol.id) {
-      rolDetalle.value = null
+    avisar(`Rol #${rol.id} eliminado correctamente`, json)
+    if (rolConsultado.value && rolConsultado.value.id === rol.id) {
+      rolConsultado.value = null
     }
     await cargarRoles()
   } catch (e) {
     fallar(e)
   }
 }
-
-// Filtrado de tabla
-const listaVisible = computed(() => {
-  const termino = busqueda.value.toLowerCase().trim()
-  if (!termino || /^\d+$/.test(termino)) {
-    return roles.value
-  }
-  return roles.value.filter(
-    (r) =>
-      r.name.toLowerCase().includes(termino) ||
-      (r.description && r.description.toLowerCase().includes(termino))
-  )
-})
 
 onMounted(cargarRoles)
 </script>
 
 <template>
   <div class="panel">
-    <!-- Header -->
+    <!-- Encabezado -->
     <header class="header">
       <h2>CRUD de Roles</h2>
       <p>22160984 - Acevedo García José Antonio</p>
     </header>
 
-    <!-- Avisos -->
+    <!-- Notificaciones -->
     <div v-if="mensaje" class="msg msg-ok">{{ mensaje }}</div>
     <div v-if="error" class="msg msg-err">{{ error }}</div>
 
-    <!-- Búsqueda -->
-    <section class="bloque">
-      <h3>Buscar Rol</h3>
-      <form @submit.prevent="buscar" class="fila">
-        <input
-          v-model="busqueda"
-          type="text"
-          placeholder="Buscar por ID o Nombre..."
-          class="input-grow"
-        />
-        <button type="submit">Buscar</button>
-        <button type="button" @click="limpiarBusqueda">Ver todos</button>
-      </form>
-    </section>
+    <div class="grid-cuadros">
+      <!-- Cuadro 1: Crear nuevo rol -->
+      <section class="bloque">
+        <h3>1. Nuevo Rol (Crear)</h3>
+        <form @submit.prevent="ejecutarCrear" class="formulario">
+          <div class="campo">
+            <label>Nombre:</label>
+            <input v-model="nuevoNombre" type="text" placeholder="Ej. supervisor" maxlength="30" required />
+          </div>
+          <div class="campo">
+            <label>Descripción:</label>
+            <input v-model="nuevaDescripcion" type="text" placeholder="Ej. Supervisa operaciones" />
+          </div>
+          <button type="submit">Crear Rol</button>
+        </form>
+      </section>
 
-    <!-- Detalle consultado individualmente -->
-    <section v-if="rolDetalle" class="bloque detalle">
-      <h3>Detalle del Rol #{{ rolDetalle.id }}</h3>
-      <p><strong>ID:</strong> {{ rolDetalle.id }}</p>
-      <p><strong>Nombre:</strong> {{ rolDetalle.name }}</p>
-      <p><strong>Descripción:</strong> {{ rolDetalle.description || 'Sin descripción' }}</p>
-      <div class="fila-btns">
-        <button @click="editar(rolDetalle)">Editar</button>
-        <button @click="rolDetalle = null">Cerrar</button>
-      </div>
-    </section>
+      <!-- Cuadro 2: Consultar rol (Ver uno) -->
+      <section class="bloque">
+        <h3>2. Consultar Rol (Ver uno)</h3>
+        <form @submit.prevent="ejecutarConsultar" class="formulario">
+          <div class="campo">
+            <label>ID del Rol:</label>
+            <div class="fila">
+              <input v-model="consultarId" type="number" min="1" placeholder="Ej. 1" class="input-grow" required />
+              <button type="submit">Consultar</button>
+            </div>
+          </div>
+        </form>
 
-    <!-- Formulario Crear / Editar -->
-    <section class="bloque">
-      <h3>{{ idEditando ? `Editar Rol #${idEditando}` : 'Nuevo Rol' }}</h3>
-      <form @submit.prevent="guardar" class="formulario">
-        <div class="campo">
-          <label>Nombre:</label>
-          <input v-model="nombre" type="text" maxlength="30" required />
+        <div v-if="rolConsultado" class="resultado-consulta">
+          <p><strong>ID:</strong> {{ rolConsultado.id }}</p>
+          <p><strong>Nombre:</strong> {{ rolConsultado.name }}</p>
+          <p><strong>Descripción:</strong> {{ rolConsultado.description || 'Sin descripción' }}</p>
+          <button type="button" class="btn-sm" @click="rolConsultado = null">Cerrar detalle</button>
         </div>
-        <div class="campo">
-          <label>Descripción:</label>
-          <input v-model="descripcion" type="text" />
+      </section>
+    </div>
+
+    <!-- Cuadro 3: Editar rol (Cuadro separado) -->
+    <section class="bloque">
+      <h3>3. Editar Rol (Actualizar)</h3>
+      <form @submit.prevent="ejecutarActualizar" class="formulario">
+        <div class="fila-tres">
+          <div class="campo">
+            <label>ID a editar:</label>
+            <div class="fila">
+              <input v-model="editarId" type="number" min="1" placeholder="ID" style="width: 80px;" required />
+              <button type="button" @click="cargarDatosParaEditar">Cargar</button>
+            </div>
+          </div>
+          <div class="campo input-grow">
+            <label>Nombre actualizado:</label>
+            <input v-model="editarNombre" type="text" placeholder="Nombre" maxlength="30" required />
+          </div>
+          <div class="campo input-grow">
+            <label>Descripción actualizada:</label>
+            <input v-model="editarDescripcion" type="text" placeholder="Descripción" />
+          </div>
         </div>
         <div class="fila-btns">
-          <button type="submit">{{ idEditando ? 'Guardar Cambios' : 'Crear' }}</button>
-          <button v-if="idEditando" type="button" @click="limpiarForm">Cancelar</button>
+          <button type="submit">Guardar Cambios</button>
+          <button type="button" @click="editarId = ''; editarNombre = ''; editarDescripcion = ''">Limpiar</button>
         </div>
       </form>
     </section>
 
-    <!-- Tabla de Roles -->
+    <!-- Cuadro 4: Lista de roles (Solo botón eliminar) -->
     <section class="bloque">
       <div class="fila-titulo">
-        <h3>Lista de Roles ({{ listaVisible.length }})</h3>
-        <button @click="cargarRoles">Actualizar lista</button>
+        <h3>4. Listado de Roles ({{ roles.length }})</h3>
+        <button @click="cargarRoles">Recargar lista</button>
       </div>
 
       <table>
@@ -226,30 +247,28 @@ onMounted(cargarRoles)
             <th style="width: 60px;">ID</th>
             <th>Nombre</th>
             <th>Descripción</th>
-            <th style="width: 170px;">Acciones</th>
+            <th style="width: 100px; text-align: center;">Acción</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-if="listaVisible.length === 0">
+          <tr v-if="roles.length === 0">
             <td colspan="4" style="text-align: center; color: #777;">
-              No hay registros disponibles.
+              No hay roles registrados.
             </td>
           </tr>
-          <tr v-for="rol in listaVisible" :key="rol.id">
-            <td>{{ rol.id }}</td>
+          <tr v-for="rol in roles" :key="rol.id">
+            <td>#{{ rol.id }}</td>
             <td><strong>{{ rol.name }}</strong></td>
             <td>{{ rol.description || '-' }}</td>
-            <td>
-              <button class="btn-sm" @click="verUno(rol.id)">Ver</button>
-              <button class="btn-sm" @click="editar(rol)">Editar</button>
-              <button class="btn-sm" @click="borrar(rol)">Eliminar</button>
+            <td style="text-align: center;">
+              <button class="btn-sm" @click="ejecutarEliminar(rol)">Eliminar</button>
             </td>
           </tr>
         </tbody>
       </table>
     </section>
 
-    <!-- Respuesta JSON del backend -->
+    <!-- Respuesta JSON -->
     <section class="bloque">
       <details>
         <summary>Respuesta del microservicio (JSON)</summary>
@@ -261,7 +280,7 @@ onMounted(cargarRoles)
 
 <style scoped>
 .panel {
-  max-width: 800px;
+  max-width: 850px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -299,6 +318,18 @@ onMounted(cargarRoles)
   font-weight: 600;
 }
 
+.grid-cuadros {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 680px) {
+  .grid-cuadros {
+    grid-template-columns: 1fr;
+  }
+}
+
 .bloque {
   border: 1px solid #ccc;
   padding: 14px;
@@ -306,26 +337,10 @@ onMounted(cargarRoles)
 }
 
 .bloque h3 {
-  font-size: 15px;
+  font-size: 14px;
   margin-bottom: 10px;
   border-bottom: 1px solid #eee;
   padding-bottom: 4px;
-}
-
-.fila {
-  display: flex;
-  gap: 8px;
-}
-
-.input-grow {
-  flex: 1;
-}
-
-.fila-titulo {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
 }
 
 .formulario {
@@ -346,26 +361,50 @@ onMounted(cargarRoles)
   text-transform: uppercase;
 }
 
+.fila {
+  display: flex;
+  gap: 8px;
+}
+
+.fila-tres {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.input-grow {
+  flex: 1;
+  min-width: 160px;
+}
+
 .fila-btns {
   display: flex;
   gap: 8px;
   margin-top: 4px;
 }
 
+.fila-titulo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.resultado-consulta {
+  margin-top: 10px;
+  padding: 10px;
+  background: #f9f9f9;
+  border: 1px solid #111;
+  font-size: 13px;
+}
+
+.resultado-consulta p {
+  margin-bottom: 4px;
+}
+
 .btn-sm {
   padding: 3px 8px;
   font-size: 12px;
-  margin-right: 4px;
-}
-
-.detalle {
-  background: #fafafa;
-  border: 1px solid #111;
-}
-
-.detalle p {
-  font-size: 13px;
-  margin-bottom: 4px;
 }
 
 details summary {
@@ -381,7 +420,7 @@ details summary {
   margin-top: 8px;
   font-size: 11px;
   overflow: auto;
-  max-height: 200px;
+  max-height: 180px;
   font-family: monospace;
 }
 </style>
