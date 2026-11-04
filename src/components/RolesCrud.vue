@@ -234,7 +234,7 @@ onMounted(cargarRoles)
       </form>
     </section>
 
-    <!-- Cuadro 4: Lista de roles (Solo botón eliminar) -->
+    <!-- Cuadro 4: Lista de roles -->
     <section class="bloque">
       <div class="fila-titulo">
         <h3>4. Listado de Roles ({{ roles.length }})</h3>
