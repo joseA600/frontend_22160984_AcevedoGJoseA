@@ -8,97 +8,91 @@ import {
   eliminarRol,
 } from '../services/roles.service'
 
-// Estados reactivos
 const roles = ref([])
-const cargando = ref(false)
 const nombre = ref('')
 const descripcion = ref('')
 const idEditando = ref(null)
-const mensajeExito = ref('')
-const mensajeError = ref('')
-const respuestaBackend = ref(null)
+const busqueda = ref('')
+const rolDetalle = ref(null)
+const mensaje = ref('')
+const error = ref('')
+const respuestaRaw = ref(null)
 
-// Búsqueda individual por ID y filtro de tabla
-const idBusqueda = ref('')
-const filtroTexto = ref('')
-
-// Modal de detalle
-const rolSeleccionado = ref(null)
-const cargandoDetalle = ref(false)
-
-// Métodos de notificación
-function notificarExito(json, textoPersonalizado = '') {
-  respuestaBackend.value = json
-  mensajeExito.value = textoPersonalizado || json.message || 'Operación completada con éxito'
-  mensajeError.value = ''
+function notificar(txt, json = null) {
+  mensaje.value = txt
+  error.value = ''
+  if (json) respuestaRaw.value = json
 }
 
-function notificarError(error) {
-  mensajeError.value = error.message || 'Error en la petición'
-  mensajeExito.value = ''
+function fallar(err) {
+  error.value = err.message || 'Error en la petición'
+  mensaje.value = ''
 }
 
-function limpiarNotificaciones() {
-  mensajeExito.value = ''
-  mensajeError.value = ''
-}
-
-// Cargar todos los roles (GET /roles)
+// 1. Listar todos
 async function cargarRoles() {
-  cargando.value = true
-  limpiarNotificaciones()
   try {
     const json = await obtenerRoles()
     roles.value = json.data || []
-    respuestaBackend.value = json
-  } catch (error) {
-    notificarError(error)
-  } finally {
-    cargando.value = false
+    respuestaRaw.value = json
+  } catch (e) {
+    fallar(e)
   }
 }
 
-// Ver detalle de un rol por ID (GET /roles/:id)
-async function verDetalle(id) {
-  cargandoDetalle.value = true
-  limpiarNotificaciones()
-  try {
-    const json = await obtenerRol(id)
-    rolSeleccionado.value = json.data
-    respuestaBackend.value = json
-    notificarExito(json, `Detalle del rol #${id} consultado`)
-  } catch (error) {
-    notificarError(error)
-  } finally {
-    cargandoDetalle.value = false
-  }
-}
-
-// Buscar individualmente por ID ingresado en el buscador
-async function buscarPorId() {
-  const id = idBusqueda.value.toString().trim()
-  if (!id) {
-    notificarError(new Error('Ingresa un ID válido para buscar'))
+// 2. Buscar por ID o por nombre
+async function buscar() {
+  const termino = busqueda.value.trim()
+  if (!termino) {
+    cargarRoles()
+    rolDetalle.value = null
     return
   }
-  await verDetalle(id)
+
+  // Si es un número entero, consulta el endpoint específico GET /roles/:id
+  if (/^\d+$/.test(termino)) {
+    try {
+      const json = await obtenerRol(termino)
+      rolDetalle.value = json.data
+      notificar(`Rol #${termino} encontrado`, json)
+    } catch (e) {
+      rolDetalle.value = null
+      fallar(e)
+    }
+  } else {
+    // Si es texto, filtra por nombre en la lista
+    rolDetalle.value = null
+    notificar(`Filtrando por: ${termino}`)
+  }
 }
 
-function cerrarModal() {
-  rolSeleccionado.value = null
+function limpiarBusqueda() {
+  busqueda.value = ''
+  rolDetalle.value = null
+  cargarRoles()
 }
 
-// Guardar (Crear o Actualizar)
-async function guardarRol() {
-  const nombreLimpio = nombre.value.trim()
+// 3. Ver uno en detalle
+async function verUno(id) {
+  try {
+    const json = await obtenerRol(id)
+    rolDetalle.value = json.data
+    notificar(`Detalle del rol #${id}`, json)
+  } catch (e) {
+    fallar(e)
+  }
+}
 
-  if (!nombreLimpio) {
-    mensajeError.value = 'El nombre del rol es requerido.'
+// 4. Crear o Actualizar
+async function guardar() {
+  const n = nombre.value.trim()
+  if (!n) {
+    error.value = 'El campo nombre es obligatorio'
     return
   }
 
   const payload = {
-    name: nombreLimpio,
+    name: n,
     description: descripcion.value.trim() || null,
   }
 
@@ -106,716 +100,288 @@ async function guardarRol() {
     let json
     if (idEditando.value) {
       json = await actualizarRol(idEditando.value, payload)
-      notificarExito(json, `Rol #${idEditando.value} actualizado`)
+      notificar(`Rol #${idEditando.value} actualizado`, json)
     } else {
       json = await crearRol(payload)
-      notificarExito(json, 'Rol creado exitosamente')
+      notificar('Rol creado', json)
     }
-    limpiarFormulario()
+    limpiarForm()
     await cargarRoles()
-  } catch (error) {
-    notificarError(error)
+  } catch (e) {
+    fallar(e)
   }
 }
 
-// Preparar edición
-function iniciarEdicion(rol) {
+function editar(rol) {
   idEditando.value = rol.id
   nombre.value = rol.name
   descripcion.value = rol.description || ''
-  limpiarNotificaciones()
-  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function limpiarFormulario() {
+function limpiarForm() {
   idEditando.value = null
   nombre.value = ''
   descripcion.value = ''
 }
 
-// Eliminar rol (DELETE /roles/:id)
-async function borrarRol(rol) {
-  const confirmar = confirm(`¿Deseas eliminar el rol ${rol.name} (ID: ${rol.id})?`)
-  if (!confirmar) return
-
+// 5. Eliminar
+async function borrar(rol) {
+  if (!confirm(`¿Eliminar el rol ${rol.name} (#${rol.id})?`)) return
   try {
     const json = await eliminarRol(rol.id)
-    notificarExito(json, `Rol ${rol.name} eliminado`)
+    notificar(`Rol #${rol.id} eliminado`, json)
+    if (rolDetalle.value && rolDetalle.value.id === rol.id) {
+      rolDetalle.value = null
+    }
     await cargarRoles()
-  } catch (error) {
-    notificarError(error)
+  } catch (e) {
+    fallar(e)
   }
 }
 
-// Roles filtrados por texto (en vivo)
-const rolesFiltrados = computed(() => {
-  if (!filtroTexto.value.trim()) return roles.value
-  const query = filtroTexto.value.toLowerCase().trim()
-  return roles.value.filter((rol) =>
-    rol.name.toLowerCase().includes(query) ||
-    (rol.description && rol.description.toLowerCase().includes(query)) ||
-    rol.id.toString().includes(query)
+// Filtrado de tabla
+const listaVisible = computed(() => {
+  const termino = busqueda.value.toLowerCase().trim()
+  if (!termino || /^\d+$/.test(termino)) {
+    return roles.value
+  }
+  return roles.value.filter(
+    (r) =>
+      r.name.toLowerCase().includes(termino) ||
+      (r.description && r.description.toLowerCase().includes(termino))
   )
 })
 
-onMounted(() => {
-  cargarRoles()
-})
+onMounted(cargarRoles)
 </script>
 
 <template>
-  <div class="crud-container">
-    <!-- Encabezado Principal -->
-    <header class="main-header">
-      <div class="header-titles">
-        <h1>CRUD de Roles</h1>
-        <p class="subtitle">Consumo de API REST - Microservicio</p>
-      </div>
-      <div class="student-badge">
-        <strong>22160984</strong>
-        <span>Acevedo García José Antonio</span>
-      </div>
+  <div class="panel">
+    <!-- Header -->
+    <header class="header">
+      <h2>CRUD de Roles</h2>
+      <p>22160984 - Acevedo García José Antonio</p>
     </header>
 
-    <!-- Notificaciones de éxito y error -->
-    <div v-if="mensajeExito" class="alert alert-success">
-      <span>{{ mensajeExito }}</span>
-      <button class="alert-close" @click="mensajeExito = ''">×</button>
-    </div>
+    <!-- Avisos -->
+    <div v-if="mensaje" class="msg msg-ok">{{ mensaje }}</div>
+    <div v-if="error" class="msg msg-err">{{ error }}</div>
 
-    <div v-if="mensajeError" class="alert alert-danger">
-      <span>{{ mensajeError }}</span>
-      <button class="alert-close" @click="mensajeError = ''">×</button>
-    </div>
+    <!-- Búsqueda -->
+    <section class="bloque">
+      <h3>Buscar Rol</h3>
+      <form @submit.prevent="buscar" class="fila">
+        <input
+          v-model="busqueda"
+          type="text"
+          placeholder="Buscar por ID o Nombre..."
+          class="input-grow"
+        />
+        <button type="submit">Buscar</button>
+        <button type="button" @click="limpiarBusqueda">Ver todos</button>
+      </form>
+    </section>
 
-    <!-- Búsqueda Individual por ID -->
-    <section class="card search-card">
-      <div class="card-header">
-        <h2>Buscar Rol por ID</h2>
-      </div>
-      <div class="form-body">
-        <form @submit.prevent="buscarPorId" class="search-form">
-          <div class="search-field">
-            <label for="buscarId">Identificador (ID):</label>
-            <input
-              id="buscarId"
-              v-model="idBusqueda"
-              type="number"
-              min="1"
-              placeholder="Ingresa el ID del rol (ej. 1, 2, 3)"
-            />
-          </div>
-          <button type="submit" class="btn btn-primary" :disabled="cargandoDetalle">
-            {{ cargandoDetalle ? 'Consultando...' : 'Buscar' }}
-          </button>
-        </form>
+    <!-- Detalle consultado individualmente -->
+    <section v-if="rolDetalle" class="bloque detalle">
+      <h3>Detalle del Rol #{{ rolDetalle.id }}</h3>
+      <p><strong>ID:</strong> {{ rolDetalle.id }}</p>
+      <p><strong>Nombre:</strong> {{ rolDetalle.name }}</p>
+      <p><strong>Descripción:</strong> {{ rolDetalle.description || 'Sin descripción' }}</p>
+      <div class="fila-btns">
+        <button @click="editar(rolDetalle)">Editar</button>
+        <button @click="rolDetalle = null">Cerrar</button>
       </div>
     </section>
 
-    <!-- Sección del Formulario Crear / Editar -->
-    <section class="card form-card">
-      <div class="card-header">
-        <h2>{{ idEditando ? `Editar Rol #${idEditando}` : 'Nuevo Rol' }}</h2>
-        <span v-if="idEditando" class="editing-pill">Modo Edición</span>
-      </div>
-
-      <form @submit.prevent="guardarRol" class="form-body">
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="nombre">Nombre</label>
-            <input
-              id="nombre"
-              v-model="nombre"
-              type="text"
-              maxlength="30"
-              placeholder="Nombre del rol"
-              required
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="descripcion">Descripción</label>
-            <input
-              id="descripcion"
-              v-model="descripcion"
-              type="text"
-              placeholder="Descripción del rol"
-            />
-          </div>
+    <!-- Formulario Crear / Editar -->
+    <section class="bloque">
+      <h3>{{ idEditando ? `Editar Rol #${idEditando}` : 'Nuevo Rol' }}</h3>
+      <form @submit.prevent="guardar" class="formulario">
+        <div class="campo">
+          <label>Nombre:</label>
+          <input v-model="nombre" type="text" maxlength="30" required />
         </div>
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">
-            {{ idEditando ? 'Actualizar' : 'Crear' }}
-          </button>
-          <button
-            v-if="idEditando"
-            type="button"
-            class="btn btn-secondary"
-            @click="limpiarFormulario"
-          >
-            Cancelar
-          </button>
+        <div class="campo">
+          <label>Descripción:</label>
+          <input v-model="descripcion" type="text" />
+        </div>
+        <div class="fila-btns">
+          <button type="submit">{{ idEditando ? 'Guardar Cambios' : 'Crear' }}</button>
+          <button v-if="idEditando" type="button" @click="limpiarForm">Cancelar</button>
         </div>
       </form>
     </section>
 
-    <!-- Sección de la Tabla -->
-    <section class="card table-card">
-      <div class="card-header table-header">
-        <div>
-          <h2>Listado de Roles</h2>
-          <span class="count-badge">{{ rolesFiltrados.length }} de {{ roles.length }} registro(s)</span>
-        </div>
-        <div class="table-tools">
-          <input
-            v-model="filtroTexto"
-            type="text"
-            placeholder="Filtrar por nombre o texto..."
-            class="filter-input"
-          />
-          <button class="btn btn-outline" @click="cargarRoles" :disabled="cargando">
-            {{ cargando ? 'Cargando...' : 'Recargar' }}
-          </button>
-        </div>
+    <!-- Tabla de Roles -->
+    <section class="bloque">
+      <div class="fila-titulo">
+        <h3>Lista de Roles ({{ listaVisible.length }})</h3>
+        <button @click="cargarRoles">Actualizar lista</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th style="width: 80px;">ID</th>
-              <th style="width: 180px;">Nombre</th>
-              <th>Descripción</th>
-              <th style="width: 220px; text-align: center;">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="rolesFiltrados.length === 0">
-              <td colspan="4" class="empty-state">
-                No se encontraron registros.
-              </td>
-            </tr>
-            <tr v-for="rol in rolesFiltrados" :key="rol.id">
-              <td class="cell-id">#{{ rol.id }}</td>
-              <td>
-                <span class="role-tag">{{ rol.name }}</span>
-              </td>
-              <td class="cell-desc">{{ rol.description || 'Sin descripción' }}</td>
-              <td class="cell-actions">
-                <button
-                  class="btn-action btn-view"
-                  title="Ver"
-                  @click="verDetalle(rol.id)"
-                >
-                  Ver
-                </button>
-                <button
-                  class="btn-action btn-edit"
-                  title="Editar"
-                  @click="iniciarEdicion(rol)"
-                >
-                  Editar
-                </button>
-                <button
-                  class="btn-action btn-delete"
-                  title="Eliminar"
-                  @click="borrarRol(rol)"
-                >
-                  Eliminar
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 60px;">ID</th>
+            <th>Nombre</th>
+            <th>Descripción</th>
+            <th style="width: 170px;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="listaVisible.length === 0">
+            <td colspan="4" style="text-align: center; color: #777;">
+              No hay registros disponibles.
+            </td>
+          </tr>
+          <tr v-for="rol in listaVisible" :key="rol.id">
+            <td>{{ rol.id }}</td>
+            <td><strong>{{ rol.name }}</strong></td>
+            <td>{{ rol.description || '-' }}</td>
+            <td>
+              <button class="btn-sm" @click="verUno(rol.id)">Ver</button>
+              <button class="btn-sm" @click="editar(rol)">Editar</button>
+              <button class="btn-sm" @click="borrar(rol)">Eliminar</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </section>
 
-    <!-- Modal Detalle del Rol -->
-    <div v-if="rolSeleccionado" class="modal-overlay" @click.self="cerrarModal">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3>Detalle del Rol</h3>
-          <button class="modal-close" @click="cerrarModal">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="detail-row">
-            <span class="detail-label">ID:</span>
-            <span class="detail-value font-mono">#{{ rolSeleccionado.id }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Nombre:</span>
-            <span class="detail-value">
-              <span class="role-tag">{{ rolSeleccionado.name }}</span>
-            </span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Descripción:</span>
-            <span class="detail-value">{{ rolSeleccionado.description || 'Sin descripción' }}</span>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="cerrarModal">Cerrar</button>
-          <button
-            class="btn btn-primary"
-            @click="iniciarEdicion(rolSeleccionado); cerrarModal()"
-          >
-            Editar Rol
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Visor de Respuesta del Microservicio JSON -->
-    <section class="card raw-card">
+    <!-- Respuesta JSON del backend -->
+    <section class="bloque">
       <details>
-        <summary>
-          <strong>Respuesta JSON del Microservicio</strong>
-        </summary>
-        <div class="json-viewer">
-          <pre>{{ respuestaBackend ? JSON.stringify(respuestaBackend, null, 2) : 'Sin datos' }}</pre>
-        </div>
+        <summary>Respuesta del microservicio (JSON)</summary>
+        <pre class="json-box">{{ respuestaRaw }}</pre>
       </details>
     </section>
   </div>
 </template>
 
 <style scoped>
-.crud-container {
-  max-width: 980px;
+.panel {
+  max-width: 800px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-}
-
-/* Header */
-.main-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
   gap: 16px;
-  background: var(--surface-color);
-  padding: 18px 24px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
 }
 
-.header-titles h1 {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--text-main);
+.header {
+  border-bottom: 2px solid #111;
+  padding-bottom: 8px;
 }
 
-.subtitle {
-  color: var(--text-muted);
-  font-size: 0.85rem;
+.header h2 {
+  font-size: 20px;
+  margin-bottom: 2px;
 }
 
-.student-badge {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  background: var(--primary-light);
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(37, 99, 235, 0.2);
+.header p {
+  font-size: 13px;
+  color: #555;
 }
 
-.student-badge strong {
-  font-size: 0.95rem;
-  color: var(--primary);
+.msg {
+  padding: 8px 12px;
+  border: 1px solid #111;
+  font-size: 13px;
 }
 
-.student-badge span {
-  color: var(--text-muted);
-  font-size: 0.82rem;
+.msg-ok {
+  background: #f4f4f4;
 }
 
-/* Alertas */
-.alert {
-  padding: 12px 18px;
-  border-radius: var(--radius-md);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.9rem;
-}
-
-.alert-success {
-  background: var(--success-bg);
-  border: 1px solid rgba(22, 163, 74, 0.25);
-  color: var(--success);
-}
-
-.alert-danger {
-  background: var(--danger-light);
-  border: 1px solid rgba(220, 38, 38, 0.25);
-  color: var(--danger);
-}
-
-.alert-close {
-  background: none;
-  border: none;
-  font-size: 1.25rem;
-  line-height: 1;
-  color: inherit;
-  cursor: pointer;
-  padding: 0 4px;
-}
-
-/* Cards */
-.card {
-  background: var(--surface-color);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
-
-.card-header {
-  padding: 16px 22px;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.card-header h2 {
-  font-size: 1.1rem;
+.msg-err {
+  background: #ffffff;
+  border-left: 5px solid #111;
   font-weight: 600;
 }
 
-.editing-pill {
-  background: #fef3c7;
-  color: #b45309;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 20px;
+.bloque {
+  border: 1px solid #ccc;
+  padding: 14px;
+  background: #fff;
 }
 
-/* Formulario */
-.form-body {
-  padding: 20px 24px;
+.bloque h3 {
+  font-size: 15px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 4px;
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-@media (max-width: 640px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.form-group {
+.fila {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-.form-group label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-main);
-}
-
-.form-group input {
-  padding: 9px 12px;
-}
-
-.form-actions {
-  display: flex;
-  gap: 10px;
-}
-
-/* Búsqueda por ID */
-.search-form {
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
-  flex-wrap: wrap;
-}
-
-.search-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.input-grow {
   flex: 1;
-  min-width: 200px;
 }
 
-.search-field label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-main);
-}
-
-.search-field input {
-  padding: 9px 12px;
-}
-
-/* Botones */
-.btn {
-  padding: 8px 16px;
-  font-size: 0.9rem;
-}
-
-.btn-primary {
-  background: var(--primary);
-  color: white;
-}
-
-.btn-primary:hover {
-  background: var(--primary-hover);
-}
-
-.btn-secondary {
-  background: #f1f5f9;
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
-}
-
-.btn-secondary:hover {
-  background: #e2e8f0;
-}
-
-.btn-outline {
-  background: transparent;
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
-}
-
-.btn-outline:hover {
-  background: #f8fafc;
-}
-
-/* Tabla */
-.table-header {
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.table-tools {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.filter-input {
-  padding: 6px 12px;
-  font-size: 0.85rem;
-  min-width: 220px;
-}
-
-.count-badge {
-  display: inline-block;
-  margin-top: 2px;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.table-responsive {
-  overflow-x: auto;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-}
-
-.data-table th {
-  background: #f8fafc;
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.data-table td {
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--border-color);
-  font-size: 0.9rem;
-}
-
-.data-table tbody tr:hover {
-  background-color: #f8fafc;
-}
-
-.cell-id {
-  font-family: monospace;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.role-tag {
-  display: inline-block;
-  background: #e0e7ff;
-  color: #3730a3;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 0.85rem;
-}
-
-.cell-desc {
-  color: var(--text-muted);
-}
-
-.cell-actions {
-  display: flex;
-  justify-content: center;
-  gap: 6px;
-}
-
-.btn-action {
-  padding: 5px 10px;
-  font-size: 0.78rem;
-  background: white;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-}
-
-.btn-view:hover {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
-  color: #15803d;
-}
-
-.btn-edit:hover {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #1d4ed8;
-}
-
-.btn-delete:hover {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 32px !important;
-  color: var(--text-muted);
-}
-
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(2px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 16px;
-}
-
-.modal-card {
-  background: var(--surface-color);
-  border-radius: var(--radius-lg);
-  width: 100%;
-  max-width: 480px;
-  box-shadow: var(--shadow-md);
-  overflow: hidden;
-}
-
-.modal-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
+.fila-titulo {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 10px;
 }
 
-.modal-header h3 {
-  font-size: 1.05rem;
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  font-size: 1.3rem;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.modal-body {
-  padding: 18px 20px;
+.formulario {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.detail-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.detail-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
-.detail-value {
-  font-size: 0.95rem;
-  color: var(--text-main);
-}
-
-.modal-footer {
-  padding: 12px 20px;
-  background: #f8fafc;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  justify-content: flex-end;
   gap: 10px;
 }
 
-/* Raw JSON viewer */
-.raw-card {
-  padding: 14px 18px;
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.raw-card summary {
+.campo label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.fila-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.btn-sm {
+  padding: 3px 8px;
+  font-size: 12px;
+  margin-right: 4px;
+}
+
+.detalle {
+  background: #fafafa;
+  border: 1px solid #111;
+}
+
+.detalle p {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+details summary {
   cursor: pointer;
-  user-select: none;
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  font-size: 13px;
+  color: #444;
 }
 
-.raw-card summary strong {
-  color: var(--text-main);
-}
-
-.json-viewer {
-  margin-top: 10px;
-  background: #0f172a;
-  border-radius: var(--radius-md);
-  padding: 12px;
-  max-height: 220px;
+.json-box {
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  padding: 8px;
+  margin-top: 8px;
+  font-size: 11px;
   overflow: auto;
-}
-
-.json-viewer pre {
-  color: #38bdf8;
+  max-height: 200px;
   font-family: monospace;
-  font-size: 0.82rem;
 }
 </style>
