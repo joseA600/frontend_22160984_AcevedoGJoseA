@@ -1,12 +1,12 @@
 # frontend_22160984_AcevedoGJoseA
 
-Frontend desarrollado en **Vue 3** y **Vite** con CSS personalizado (diseño limpio y responsivo sin frameworks pesados como Tailwind) para consumir el microservicio de roles del docente (repositorio `BanderoChinoZF/backend_for_students`, rama `BFS-0002`).
+Frontend desarrollado en **Vue 3** y **Vite** para consumir el microservicio de roles (repositorio `BanderoChinoZF/backend_for_students`, rama `BFS-0002`).
 
 **Alumno:** 22160984 - Acevedo García José Antonio
 
 ---
 
-## 📌 Endpoints que consume
+##  Endpoints que consume
 
 - `GET /api/v2/roles` - Obtener lista de todos los roles
 - `GET /api/v2/roles/:id` - Consultar un rol por ID
@@ -16,9 +16,9 @@ Frontend desarrollado en **Vue 3** y **Vite** con CSS personalizado (diseño lim
 
 ---
 
-## 🚀 Cómo ejecutarlo
+##  Cómo ejecutarlo
 
-1. **Asegúrate de que el Backend esté corriendo:**
+1. **ver si  de que el Backend esté corriendo:**
    En la carpeta de tu backend (`backend_base`), levanta el servidor con PostgreSQL:
    ```bash
    npm run dev
