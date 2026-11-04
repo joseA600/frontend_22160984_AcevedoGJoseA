@@ -30,7 +30,7 @@ function notificarExito(json, textoPersonalizado = '') {
 }
 
 function notificarError(error) {
-  mensajeError.value = error.message || 'Ocurrió un error inesperado'
+  mensajeError.value = error.message || 'Error en la petición'
   mensajeExito.value = ''
 }
 
@@ -61,7 +61,7 @@ async function verDetalle(id) {
     const json = await obtenerRol(id)
     rolSeleccionado.value = json.data
     respuestaBackend.value = json
-    notificarExito(json, `Detalle del rol #${id} cargado correctamente`)
+    notificarExito(json, `Detalle del rol #${id} consultado`)
   } catch (error) {
     notificarError(error)
   } finally {
@@ -91,10 +91,10 @@ async function guardarRol() {
     let json
     if (idEditando.value) {
       json = await actualizarRol(idEditando.value, payload)
-      notificarExito(json, `Rol #${idEditando.value} actualizado correctamente`)
+      notificarExito(json, `Rol #${idEditando.value} actualizado`)
     } else {
       json = await crearRol(payload)
-      notificarExito(json, 'Nuevo rol creado exitosamente')
+      notificarExito(json, 'Rol creado exitosamente')
     }
     limpiarFormulario()
     await cargarRoles()
@@ -109,7 +109,6 @@ function iniciarEdicion(rol) {
   nombre.value = rol.name
   descripcion.value = rol.description || ''
   limpiarNotificaciones()
-  // Scroll suave al formulario
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -121,12 +120,12 @@ function limpiarFormulario() {
 
 // Eliminar rol (DELETE /roles/:id)
 async function borrarRol(rol) {
-  const confirmar = confirm(`¿Estás seguro de que deseas eliminar el rol "${rol.name}" (ID: ${rol.id})?`)
+  const confirmar = confirm(`¿Deseas eliminar el rol ${rol.name} (ID: ${rol.id})?`)
   if (!confirmar) return
 
   try {
     const json = await eliminarRol(rol.id)
-    notificarExito(json, `Rol "${rol.name}" eliminado correctamente`)
+    notificarExito(json, `Rol ${rol.name} eliminado`)
     await cargarRoles()
   } catch (error) {
     notificarError(error)
@@ -143,49 +142,45 @@ onMounted(() => {
     <!-- Encabezado Principal -->
     <header class="main-header">
       <div class="header-titles">
-        <h1>Control de Roles</h1>
-        <p class="subtitle">Consumo de microservicio REST con PostgreSQL</p>
+        <h1>CRUD de Roles</h1>
+        <p class="subtitle">Consumo de API REST - Microservicio</p>
       </div>
       <div class="student-badge">
-        <span class="badge-icon">🎓</span>
-        <div>
-          <strong>22160984</strong>
-          <small>Acevedo García José Antonio</small>
-        </div>
+        <strong>22160984</strong>
+        <span>Acevedo García José Antonio</span>
       </div>
     </header>
 
     <!-- Notificaciones de éxito y error -->
     <div v-if="mensajeExito" class="alert alert-success">
-      <span>✅ {{ mensajeExito }}</span>
+      <span>{{ mensajeExito }}</span>
       <button class="alert-close" @click="mensajeExito = ''">×</button>
     </div>
 
     <div v-if="mensajeError" class="alert alert-danger">
-      <span>⚠️ {{ mensajeError }}</span>
+      <span>{{ mensajeError }}</span>
       <button class="alert-close" @click="mensajeError = ''">×</button>
     </div>
 
     <!-- Sección del Formulario -->
     <section class="card form-card">
       <div class="card-header">
-        <h2>{{ idEditando ? `✏️ Editar Rol #${idEditando}` : '➕ Registrar Nuevo Rol' }}</h2>
+        <h2>{{ idEditando ? `Editar Rol #${idEditando}` : 'Nuevo Rol' }}</h2>
         <span v-if="idEditando" class="editing-pill">Modo Edición</span>
       </div>
 
       <form @submit.prevent="guardarRol" class="form-body">
         <div class="form-grid">
           <div class="form-group">
-            <label for="nombre">Nombre del Rol *</label>
+            <label for="nombre">Nombre</label>
             <input
               id="nombre"
               v-model="nombre"
               type="text"
               maxlength="30"
-              placeholder="Ej. admin, editor, auditor"
+              placeholder="Nombre del rol"
               required
             />
-            <small class="helper-text">Máximo 30 caracteres (único)</small>
           </div>
 
           <div class="form-group">
@@ -194,15 +189,14 @@ onMounted(() => {
               id="descripcion"
               v-model="descripcion"
               type="text"
-              placeholder="Descripción de las funciones del rol"
+              placeholder="Descripción del rol"
             />
-            <small class="helper-text">Opcional</small>
           </div>
         </div>
 
         <div class="form-actions">
           <button type="submit" class="btn btn-primary">
-            {{ idEditando ? 'Guardar Cambios' : 'Crear Rol' }}
+            {{ idEditando ? 'Actualizar' : 'Crear' }}
           </button>
           <button
             v-if="idEditando"
@@ -220,11 +214,11 @@ onMounted(() => {
     <section class="card table-card">
       <div class="card-header table-header">
         <div>
-          <h2>📋 Lista de Roles</h2>
-          <span class="count-badge">{{ roles.length }} {{ roles.length === 1 ? 'rol' : 'roles' }} registrado(s)</span>
+          <h2>Listado de Roles</h2>
+          <span class="count-badge">{{ roles.length }} registro(s)</span>
         </div>
         <button class="btn btn-outline" @click="cargarRoles" :disabled="cargando">
-          {{ cargando ? 'Cargando...' : '🔄 Recargar' }}
+          {{ cargando ? 'Cargando...' : 'Recargar' }}
         </button>
       </div>
 
@@ -241,7 +235,7 @@ onMounted(() => {
           <tbody>
             <tr v-if="roles.length === 0">
               <td colspan="4" class="empty-state">
-                <p>No hay roles disponibles o no se ha conectado el backend.</p>
+                No hay registros disponibles.
               </td>
             </tr>
             <tr v-for="rol in roles" :key="rol.id">
@@ -253,24 +247,24 @@ onMounted(() => {
               <td class="cell-actions">
                 <button
                   class="btn-action btn-view"
-                  title="Ver Detalle"
+                  title="Ver"
                   @click="verDetalle(rol.id)"
                 >
-                  👁️ Ver
+                  Ver
                 </button>
                 <button
                   class="btn-action btn-edit"
                   title="Editar"
                   @click="iniciarEdicion(rol)"
                 >
-                  ✏️ Editar
+                  Editar
                 </button>
                 <button
                   class="btn-action btn-delete"
                   title="Eliminar"
                   @click="borrarRol(rol)"
                 >
-                  🗑️ Borrar
+                  Eliminar
                 </button>
               </td>
             </tr>
@@ -283,23 +277,23 @@ onMounted(() => {
     <div v-if="rolSeleccionado" class="modal-overlay" @click.self="cerrarModal">
       <div class="modal-card">
         <div class="modal-header">
-          <h3>🔎 Detalle del Rol</h3>
+          <h3>Detalle del Rol</h3>
           <button class="modal-close" @click="cerrarModal">×</button>
         </div>
         <div class="modal-body">
           <div class="detail-row">
-            <span class="detail-label">Identificador (ID):</span>
+            <span class="detail-label">ID:</span>
             <span class="detail-value font-mono">#{{ rolSeleccionado.id }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">Nombre del Rol:</span>
+            <span class="detail-label">Nombre:</span>
             <span class="detail-value">
               <span class="role-tag">{{ rolSeleccionado.name }}</span>
             </span>
           </div>
           <div class="detail-row">
             <span class="detail-label">Descripción:</span>
-            <span class="detail-value">{{ rolSeleccionado.description || 'Sin descripción registrada' }}</span>
+            <span class="detail-value">{{ rolSeleccionado.description || 'Sin descripción' }}</span>
           </div>
         </div>
         <div class="modal-footer">
@@ -308,7 +302,7 @@ onMounted(() => {
             class="btn btn-primary"
             @click="iniciarEdicion(rolSeleccionado); cerrarModal()"
           >
-            Editar este Rol
+            Editar Rol
           </button>
         </div>
       </div>
@@ -318,11 +312,10 @@ onMounted(() => {
     <section class="card raw-card">
       <details>
         <summary>
-          <strong>📡 Respuesta JSON del Microservicio</strong>
-          <small>(Para verificar la comunicación con la API)</small>
+          <strong>Respuesta JSON del Microservicio</strong>
         </summary>
         <div class="json-viewer">
-          <pre>{{ respuestaBackend ? JSON.stringify(respuestaBackend, null, 2) : 'Sin peticiones recientes' }}</pre>
+          <pre>{{ respuestaBackend ? JSON.stringify(respuestaBackend, null, 2) : 'Sin datos' }}</pre>
         </div>
       </details>
     </section>
@@ -346,46 +339,41 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 16px;
   background: var(--surface-color);
-  padding: 20px 24px;
+  padding: 18px 24px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
 }
 
 .header-titles h1 {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   font-weight: 700;
   color: var(--text-main);
 }
 
 .subtitle {
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .student-badge {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: flex-end;
   background: var(--primary-light);
   padding: 8px 16px;
   border-radius: var(--radius-md);
   border: 1px solid rgba(37, 99, 235, 0.2);
 }
 
-.badge-icon {
-  font-size: 1.4rem;
-}
-
 .student-badge strong {
-  display: block;
   font-size: 0.95rem;
   color: var(--primary);
 }
 
-.student-badge small {
+.student-badge span {
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
 }
 
 /* Alertas */
@@ -395,7 +383,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
 .alert-success {
@@ -430,7 +418,7 @@ onMounted(() => {
 }
 
 .card-header {
-  padding: 18px 24px;
+  padding: 16px 22px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
@@ -438,7 +426,7 @@ onMounted(() => {
 }
 
 .card-header h2 {
-  font-size: 1.15rem;
+  font-size: 1.1rem;
   font-weight: 600;
 }
 
@@ -447,20 +435,20 @@ onMounted(() => {
   color: #b45309;
   font-size: 0.75rem;
   font-weight: 600;
-  padding: 4px 10px;
+  padding: 3px 10px;
   border-radius: 20px;
 }
 
 /* Formulario */
 .form-body {
-  padding: 24px;
+  padding: 20px 24px;
 }
 
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 @media (max-width: 640px) {
@@ -482,12 +470,7 @@ onMounted(() => {
 }
 
 .form-group input {
-  padding: 10px 14px;
-}
-
-.helper-text {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  padding: 9px 12px;
 }
 
 .form-actions {
@@ -497,7 +480,7 @@ onMounted(() => {
 
 /* Botones */
 .btn {
-  padding: 9px 18px;
+  padding: 8px 16px;
   font-size: 0.9rem;
 }
 
@@ -538,7 +521,7 @@ onMounted(() => {
 
 .count-badge {
   display: inline-block;
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 0.8rem;
   color: var(--text-muted);
 }
@@ -565,7 +548,7 @@ onMounted(() => {
 }
 
 .data-table td {
-  padding: 14px 18px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--border-color);
   font-size: 0.9rem;
 }
@@ -585,8 +568,8 @@ onMounted(() => {
   background: #e0e7ff;
   color: #3730a3;
   font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 6px;
+  padding: 3px 8px;
+  border-radius: 4px;
   font-size: 0.85rem;
 }
 
@@ -628,7 +611,7 @@ onMounted(() => {
 
 .empty-state {
   text-align: center;
-  padding: 40px !important;
+  padding: 32px !important;
   color: var(--text-muted);
 }
 
@@ -652,18 +635,6 @@ onMounted(() => {
   max-width: 480px;
   box-shadow: var(--shadow-md);
   overflow: hidden;
-  animation: modalEnter 0.2s ease-out;
-}
-
-@keyframes modalEnter {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 
 .modal-header {
@@ -675,7 +646,7 @@ onMounted(() => {
 }
 
 .modal-header h3 {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
 }
 
 .modal-close {
@@ -687,20 +658,20 @@ onMounted(() => {
 }
 
 .modal-body {
-  padding: 20px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .detail-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .detail-label {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -712,7 +683,7 @@ onMounted(() => {
 }
 
 .modal-footer {
-  padding: 14px 20px;
+  padding: 12px 20px;
   background: #f8fafc;
   border-top: 1px solid var(--border-color);
   display: flex;
@@ -722,13 +693,13 @@ onMounted(() => {
 
 /* Raw JSON viewer */
 .raw-card {
-  padding: 16px 20px;
+  padding: 14px 18px;
 }
 
 .raw-card summary {
   cursor: pointer;
   user-select: none;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--text-muted);
 }
 
@@ -737,17 +708,17 @@ onMounted(() => {
 }
 
 .json-viewer {
-  margin-top: 12px;
+  margin-top: 10px;
   background: #0f172a;
   border-radius: var(--radius-md);
-  padding: 14px;
-  max-height: 250px;
+  padding: 12px;
+  max-height: 220px;
   overflow: auto;
 }
 
 .json-viewer pre {
   color: #38bdf8;
   font-family: monospace;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
 }
 </style>
