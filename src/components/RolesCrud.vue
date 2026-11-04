@@ -206,7 +206,7 @@ onMounted(cargarRoles)
       </section>
     </div>
 
-    <!-- Cuadro 3: Editar rol (Cuadro separado) -->
+    <!-- Cuadro 3: Editar rol -->
     <section class="bloque">
       <h3>3. Editar Rol (Actualizar)</h3>
       <form @submit.prevent="ejecutarActualizar" class="formulario">
