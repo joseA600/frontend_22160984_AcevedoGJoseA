@@ -1,9 +1,7 @@
 // URL base del backend desde variables de entorno con fallback
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v2';
 
-/**
- * Función genérica para realizar peticiones HTTP hacia el microservicio
- */
+
 async function peticion(ruta, metodo = 'GET', datos = null) {
   const opciones = {
     method: metodo,
